@@ -433,7 +433,7 @@ rb_io_syswrite(VALUE io, SEL sel, VALUE data)
 
     data = rb_str_bstr(rb_obj_as_string(data));
     
-    if (io_struct->buf && CFDataGetLength(io_struct->buf) > 0) {
+    if (rb_io_read_pending(io_struct)) {
 	rb_warn("Calling #syswrite on buffered I/O may lead to unexpected results");
     }
     
@@ -499,7 +499,7 @@ io_write(VALUE io, SEL sel, VALUE data)
 	rb_sys_fail("write() failed");
     }
 
-    if (io_struct->buf != NULL && CFDataGetLength(io_struct->buf) > 0) {
+    if (rb_io_read_pending(io_struct)) {
 	if (length > CFDataGetLength(io_struct->buf) - io_struct->buf_offset) {
 	    CFDataIncreaseLength(io_struct->buf, length);
 	}
@@ -962,12 +962,21 @@ rb_io_wait_writable(int fd)
     return false;
 }
 
+static int
+rb_io_read_pending_count(rb_io_t *io_struct)
+{
+    if (io_struct->buf != NULL) {
+	return CFDataGetLength(io_struct->buf);
+    }
+    return 0;
+}
+
 // Note: not bool since it's exported in a public header which does not
 // include stdbool.
 int
 rb_io_read_pending(rb_io_t *io_struct)
 {
-    return io_struct->buf != NULL && CFDataGetLength(io_struct->buf) > 0;
+    return rb_io_read_pending_count(io_struct) > 0;
 }
 
 static long
@@ -993,6 +1002,7 @@ rb_io_create_buf(rb_io_t *io_struct)
 	CFMutableDataRef data = CFDataCreateMutable(NULL, 0);
 	GC_WB(&io_struct->buf, data);
 	CFMakeCollectable(data);
+	io_struct->buf_offset = 0;
     }
 }
 
@@ -1010,11 +1020,47 @@ rb_io_read_update(rb_io_t *io_struct, long len)
 }
 
 static long
+rb_io_fill_buffer(rb_io_t *io_struct)
+{
+    struct stat buf;
+    if (fstat(io_struct->read_fd, &buf) == -1 || buf.st_size == 0) {
+	return 0;
+    }
+
+    rb_io_create_buf(io_struct);
+    long size = buf.st_size;
+    CFDataSetLength(io_struct->buf, size);
+    long len = read_internal(io_struct->read_fd,
+	CFDataGetMutableBytePtr(io_struct->buf),
+	size);
+    if (len >= 0) {
+	CFDataSetLength(io_struct->buf, len);
+    }
+    return len;
+}
+
+static long
+rb_io_read_buffered(rb_io_t *io_struct, UInt8 *buffer, long len)
+{
+    const long s = rb_io_read_pending_count(io_struct);
+    if (s == 0 || len == 0) {
+	return 0;
+    }
+ 
+    const long n = len > s - io_struct->buf_offset
+	? s - io_struct->buf_offset : len;
+    memcpy(buffer, CFDataGetBytePtr(io_struct->buf) + io_struct->buf_offset, n);
+ 
+    rb_io_read_update(io_struct, n);
+    return n;
+}
+
+static long
 rb_io_read_internal(rb_io_t *io_struct, UInt8 *buffer, long len)
 {
     assert(io_struct->read_fd != -1);
 
-    if (io_struct->buf == NULL || CFDataGetLength(io_struct->buf) == 0) {
+    if (!rb_io_read_pending(io_struct)) {
 	struct stat buf;
 	if (fstat(io_struct->read_fd, &buf) == -1 || buf.st_size == 0
 		|| lseek(io_struct->read_fd, 0, SEEK_CUR) > 0) {
@@ -1022,29 +1068,9 @@ rb_io_read_internal(rb_io_t *io_struct, UInt8 *buffer, long len)
 	    return len == 0
 		? 0 : read_internal(io_struct->read_fd, buffer, len);
 	}
-
-	// TODO don't pre-read more than a certain threshold...
-	const long size = buf.st_size;
-	rb_io_create_buf(io_struct);
-	CFDataSetLength(io_struct->buf, size);
-
-	const long s = read_internal(io_struct->read_fd,
-		CFDataGetMutableBytePtr(io_struct->buf), size);
-	CFDataSetLength(io_struct->buf, s);
+	rb_io_fill_buffer(io_struct);
     }
-
-    const long s = CFDataGetLength(io_struct->buf);
-    if (s == 0 || len == 0) {
-	return 0;
-    }
-
-    const long n = len > s - io_struct->buf_offset
-	? s - io_struct->buf_offset : len;
-    memcpy(buffer, CFDataGetBytePtr(io_struct->buf) + io_struct->buf_offset, n);
-
-    rb_io_read_update(io_struct, n);
-
-    return n;
+    return rb_io_read_buffered(io_struct, buffer, len);
 }
 
 static VALUE 
@@ -1543,7 +1569,7 @@ rb_io_getline_1(VALUE sep, long line_limit, VALUE io)
 
 	// Pre-cache if possible.
 	rb_io_read_internal(io_struct, NULL, 0);
-	if (io_struct->buf != NULL && CFDataGetLength(io_struct->buf) > 0) {
+	if (rb_io_read_pending(io_struct)) {
 	    // Read from cache (fast).
 	    const UInt8 *cache = CFDataGetMutableBytePtr(io_struct->buf)
 		+ io_struct->buf_offset;
