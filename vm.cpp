@@ -2456,7 +2456,9 @@ RoxorCore::copy_method(Class klass, Method m)
 	Method m2 = class_getInstanceMethod(klass, sel);
 	assert(m2 != NULL);
 	assert(method_getImplementation(m2) == method_getImplementation(m));
+	GET_CORE()->lock();
 	rb_vm_method_node_t *node2 = method_node_get(m2, true);
+	GET_CORE()->unlock();
 	memcpy(node2, node, sizeof(rb_vm_method_node_t));
     }
     return true;
