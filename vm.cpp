@@ -795,6 +795,7 @@ extern "C"
 void *
 rb_vm_get_constant_cache(const char *name)
 {
+    RoxorCoreLock lock;
     return GET_CORE()->constant_cache_get(rb_intern(name));
 }
 
@@ -1543,8 +1544,10 @@ vm_alias_method(Class klass, Method method, ID name, bool noargs)
     SEL sel = rb_vm_id_to_sel(name, noargs ? 0 : 1);
     rb_vm_method_node_t *node = GET_CORE()->method_node_get(method);
     if (node != NULL) {
+	GET_CORE()->lock();
 	GET_CORE()->add_method(klass, sel, imp, node->ruby_imp,
 		node->arity, node->flags, types);
+	GET_CORE()->unlock();
     }
     else {
 	class_replaceMethod(klass, sel, imp, types);
@@ -2184,8 +2187,10 @@ prepare_method:
 	    imp = (IMP)data;
 	}
 	assert(objc_imp_types != NULL);
+	GET_CORE()->lock();
 	GET_CORE()->resolve_method(klass, sel, NULL, arity, flags, imp, m,
 		objc_imp_types);
+	GET_CORE()->unlock();
     }
     else {
 #if MACRUBY_STATIC
