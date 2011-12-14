@@ -731,6 +731,7 @@ rb_io_rewind(VALUE io, SEL sel)
  */
 
 static long rb_io_read_internal(rb_io_t *io_struct, UInt8 *buffer, long len);
+static void rb_io_create_buf(rb_io_t *io_struct);
 
 VALUE
 rb_io_eof(VALUE io, SEL sel)
@@ -746,6 +747,19 @@ rb_io_eof(VALUE io, SEL sel)
     const off_t pos = lseek(io_struct->fd, 0, SEEK_CUR);
     if (rb_io_read_internal(io_struct, &c, 1) != 1) {
 	return Qtrue;
+    }
+
+    struct stat buf;
+    if (fstat(io_struct->fd, &buf) != 0) {
+    	rb_sys_fail(0);
+    }
+    if (buf.st_size == 0 && pos >= 0) {
+	// got a character from stdio
+	rb_io_create_buf(io_struct);
+	CFDataIncreaseLength(io_struct->buf, 1);
+	UInt8 *data = CFDataGetMutableBytePtr(io_struct->buf);
+	memcpy(data, &c, 1);
+	io_struct->buf_offset++;
     }
 
     lseek(io_struct->fd, pos, SEEK_SET);
@@ -1580,11 +1594,16 @@ rb_io_getline_1(VALUE sep, long line_limit, VALUE io)
     else {
 	const char *sepstr = RSTRING_PTR(sep);
 	const long seplen = RSTRING_LEN(sep);
+	bool flag_fast = true;
 	assert(seplen > 0);
 
+	if (rb_io_read_pending(io_struct)) {
+	    // Need to read from IO
+	    flag_fast = false;
+	}
 	// Pre-cache if possible.
 	rb_io_read_internal(io_struct, NULL, 0);
-	if (io_struct->buf != NULL && CFDataGetLength(io_struct->buf) > 0) {
+	if (flag_fast && rb_io_read_pending(io_struct)) {
 	    // Read from cache (fast).
 	    const UInt8 *cache = CFDataGetMutableBytePtr(io_struct->buf)
 		+ io_struct->buf_offset;
