@@ -59,6 +59,8 @@ typedef struct {
     long length_in_bytes;
     char *bytes;
     str_flag_t flags;
+    bool is_shared;
+    bool is_embed;
 } rb_str_t;
 
 #define RSTR(x) ((rb_str_t *)x)

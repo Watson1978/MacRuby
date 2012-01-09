@@ -42,6 +42,11 @@ VALUE rb_fs;
 
 static SEL selMATCH;
 
+#define SET_SHARED(s, bool) { ((rb_str_t*)s)->is_shared = bool; }
+#define SET_EMBED(s, bool)  { ((rb_str_t*)s)->is_embed = bool; }
+#define STR_SHARED_P(s)     (((rb_str_t*)s)->is_shared == true)
+#define STR_EMBED_P(s)      (((rb_str_t*)s)->is_embed == true)
+
 // rb_str_t primitives.
 
 static void
@@ -228,6 +233,8 @@ str_alloc(VALUE klass)
     str->capacity_in_bytes = 0;
     str->length_in_bytes = 0;
     str->bytes = NULL;
+    str->is_shared = false;
+    str->is_embed = false;
     str_reset_flags(str);
 
     return str;
@@ -249,6 +256,44 @@ str_new_like(VALUE obj)
 
 static void str_resize_bytes(rb_str_t *self, long new_capacity);
 static void str_concat_bytes(rb_str_t *self, const char *bytes, long len);
+static void str_replace_with_cfstring(rb_str_t *self, CFStringRef source);
+
+static inline void
+str_shared(rb_str_t *self, rb_str_t *source)
+{
+    GC_WB(&self->bytes, source->bytes);
+
+    self->length_in_bytes = source->length_in_bytes;
+    self->capacity_in_bytes = source->capacity_in_bytes;
+    self->encoding = source->encoding;
+    if (!source->flags) {
+	str_update_flags(source);
+    }
+    self->flags = source->flags;
+
+    SET_SHARED(source, true);
+    SET_EMBED(self, false);
+}
+
+static inline void
+str_shared_to_embed(rb_str_t *self)
+{
+    if (!STR_SHARED_P(self) && STR_EMBED_P(self)) {
+	return;
+    }
+
+    const char *bytes = self->bytes;
+
+    SET_SHARED(self, false);
+    SET_EMBED(self, true);
+
+    if (self->capacity_in_bytes == self->length_in_bytes) {
+	self->capacity_in_bytes++;
+    }
+    GC_WB(&self->bytes, xmalloc(self->capacity_in_bytes));
+    memcpy(self->bytes, bytes, self->length_in_bytes);
+    self->bytes[self->length_in_bytes] = '\0';
+}
 
 static void
 str_replace_with_bytes(rb_str_t *self, const char *bytes, long len,
@@ -257,6 +302,7 @@ str_replace_with_bytes(rb_str_t *self, const char *bytes, long len,
     assert(len >= 0);
     assert(enc != NULL);
 
+    str_shared_to_embed(self);
     str_reset_flags(self);
     self->encoding = enc;
     if (len > 0) {
@@ -280,8 +326,13 @@ str_replace_with_string(rb_str_t *self, rb_str_t *source)
     if (self == source) {
 	return;
     }
-    str_replace_with_bytes(self, source->bytes, source->length_in_bytes,
-	    source->encoding);
+    if (source->length_in_bytes > 0) {
+	str_shared(self, source);
+    }
+    else {
+	str_replace_with_bytes(self, source->bytes, source->length_in_bytes,
+			       source->encoding);
+    }
     if (!source->flags) {
 	str_update_flags(source);
     }
@@ -291,6 +342,7 @@ str_replace_with_string(rb_str_t *self, rb_str_t *source)
 static void
 str_append_uchar32(rb_str_t *self, UChar32 c)
 {
+    str_shared_to_embed(self);
     str_reset_flags(self);
     if ((c <= 127) && self->encoding->ascii_compatible) {
 	str_resize_bytes(self, self->length_in_bytes + 1);
@@ -606,6 +658,8 @@ str_new_copy_of_part(rb_str_t *self, long offset_in_bytes,
 	// then a part of that string is also ASCII only
 	str_set_ascii_only(str, true);
     }
+    SET_SHARED(self, false);
+    SET_EMBED(self, true);
     return str;
 }
 
@@ -783,7 +837,8 @@ str_resize_bytes(rb_str_t *self, long new_capacity)
 	rb_raise(rb_eArgError, "negative string size (or size too big)");
     }
     if (self->capacity_in_bytes < new_capacity) {
-	size_t capacity = new_capacity * 1.2;
+	str_shared_to_embed(self);
+	size_t capacity = new_capacity * 1.2 + 1;
 	if (capacity > 0){
 	    new_capacity = capacity;
 	}
@@ -803,9 +858,11 @@ str_resize_bytes(rb_str_t *self, long new_capacity)
 static void
 str_ensure_null_terminator(rb_str_t *self)
 {
+    if (self->capacity_in_bytes == self->length_in_bytes) {
+	str_shared_to_embed(self);
+    }
     if (self->length_in_bytes > 0
-	&& (self->capacity_in_bytes == self->length_in_bytes
-	    || self->bytes[self->length_in_bytes] != '\0')) {
+	&& self->bytes[self->length_in_bytes] != '\0') {
 	str_resize_bytes(self, self->length_in_bytes + 1);
 	self->bytes[self->length_in_bytes] = '\0';
     }
@@ -817,6 +874,7 @@ str_splice(rb_str_t *self, long pos, long len, rb_str_t *str)
     // self[pos..pos+len] = str
     assert(pos >= 0 && len >= 0);
 
+    str_shared_to_embed(self);
     if (str != NULL) {
 	str_must_have_compatible_encoding(self, str);
     }
@@ -911,6 +969,7 @@ str_concat_bytes(rb_str_t *self, const char *bytes, long len)
 
     const long new_length_in_bytes = self->length_in_bytes + len;
 
+    str_shared_to_embed(self);
     str_resize_bytes(self, new_length_in_bytes);
     memcpy(self->bytes + self->length_in_bytes, bytes, len);
     self->length_in_bytes = new_length_in_bytes;
@@ -922,6 +981,7 @@ str_concat_uchars(rb_str_t *self, const UChar *chars, long len)
     if (len == 0) {
 	return;
     }
+    str_shared_to_embed(self);
     str_reset_flags(self);
     if (IS_UTF8_ENC(self->encoding)) {
 	long new_length_in_bytes = self->length_in_bytes;
@@ -1499,6 +1559,10 @@ rstr_substr_with_cache(VALUE str, long beg, long len,
 	len = n - beg;
     }
 
+    if (beg == 0 && n == len) {
+	return rb_str_new_shared(str);
+    }
+
     rb_str_t *substr = str_get_characters(RSTR(str), beg, beg + len - 1, cache);
     OBJ_INFECT(substr, str);
     return substr == NULL ? Qnil : (VALUE)substr;
@@ -1971,6 +2035,7 @@ rstr_setbyte(VALUE self, SEL sel, VALUE idx, VALUE value)
     if (index < 0) {
 	index += RSTR(self)->length_in_bytes;
     }
+    str_shared_to_embed(RSTR(self));
     str_reset_flags(RSTR(self));
     RSTR(self)->bytes[index] = byte;
     return value;
@@ -3980,7 +4045,7 @@ rstr_sub_bang(VALUE str, SEL sel, int argc, VALUE *argv)
 	assert(count > 0);
 
 	if (block_given || !NIL_P(hash)) {
-            if (block_given) {
+	    if (block_given) {
 		rb_match_busy(match);
 		const unsigned long hash = rb_str_hash(str);
 		repl = rb_obj_as_string(rb_yield(rb_reg_nth_match(0, match)));
@@ -4286,6 +4351,7 @@ rstr_change_case(VALUE str, change_case_callback_t callback)
 		char new_c = callback(c, i == 0);
 		if (new_c != c) {
 		    changed = true;
+		    str_shared_to_embed(RSTR(str));
 		    RSTR(str)->bytes[i] = new_c;
 		}
 	    }
@@ -4302,6 +4368,7 @@ rstr_change_case(VALUE str, change_case_callback_t callback)
 		char new_c = callback(c, start_index == 0);
 		if (new_c != c) {
 		    changed = true;
+		    str_shared_to_embed(RSTR(str));
 		    memset(&RSTR(str)->bytes[start_index], 0, char_len);
 		    if (RSTR(str)->encoding->little_endian) {
 			RSTR(str)->bytes[start_index] = new_c;
@@ -5259,6 +5326,8 @@ rstr_reverse_bang(VALUE str, SEL sel)
 
     RSTR(str)->capacity_in_bytes = RSTR(str)->length_in_bytes;
     GC_WB(&RSTR(str)->bytes, new_bytes);
+    SET_SHARED(str, false);
+    SET_EMBED(str, true);
 
     // we modify it directly so the information stored
     // in the facultative flags might be outdated
@@ -6373,10 +6442,17 @@ rb_str_new2(const char *cstr)
 VALUE
 rb_str_new3(VALUE source)
 {
-    rb_str_t *str = str_alloc(rb_obj_class(source));
-    str_replace(str, source);
-    OBJ_INFECT(str, source);
-    return (VALUE)str;
+    rb_str_t *str1 = str_alloc(rb_obj_class(source));
+    rb_str_t *str2 = str_need_string(source);
+    str_shared(str1, str2);
+    OBJ_INFECT(str1, str2);
+    return (VALUE)str1;
+}
+
+VALUE
+rb_str_new_shared(VALUE source)
+{
+    return rb_str_new3(source);
 }
 
 VALUE
