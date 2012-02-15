@@ -3960,7 +3960,7 @@ extern "C"
 void
 rb_vm_print_exception(VALUE exc)
 {
-    printf("%s", rb_str_cstr(rb_format_exception_message(exc)));
+    rb_write_error(rb_str_cstr(rb_format_exception_message(exc)));
 }
 
 extern "C"
@@ -3969,7 +3969,7 @@ rb_vm_print_current_exception(void)
 {
     VALUE exc = GET_VM()->current_exception();
     if (exc == Qnil) {
-	printf("uncaught Objective-C/C++ exception...\n");
+	rb_write_error("uncaught Objective-C/C++ exception...\n");
 	std::terminate();
     }
     rb_vm_print_exception(exc);
