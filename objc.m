@@ -551,7 +551,7 @@ rb_objc_numeric2nsnumber(VALUE obj)
 	CFMakeCollectable(number);
 	return (id)number;
     }
-    if (FIXFLOAT_P(obj)) {
+    if (FLOAT_P(obj)) {
 	double val = NUM2DBL(obj);
 	CFNumberRef number = CFNumberCreate(NULL, kCFNumberDoubleType,
 		&val);

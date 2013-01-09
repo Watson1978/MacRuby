@@ -577,7 +577,35 @@ num_to_int(VALUE num, SEL sel)
 VALUE
 rb_float_new(double d)
 {
-    return DBL2FIXFLOAT(d);
+    union {
+	VALUE val;
+#if __LP64__
+	double d;
+#else
+	float d;
+#endif
+    } coerced_value;
+
+    coerced_value.d = d;
+    if ((coerced_value.val & IMMEDIATE_MASK) == 0x00 && coerced_value.d == d) {
+	return DBL2FIXFLOAT(d);
+    }
+
+    NEWOBJ(flt, struct RFloat);
+    OBJSETUP(flt, rb_cFloat, T_FLOAT);
+
+    flt->float_value = d;
+    return (VALUE)flt;
+}
+
+VALUE
+rb_float_new_retaind(double d)
+{
+    VALUE flt = rb_float_new(d);
+    if (!FIXFLOAT_P(flt)) {
+	GC_RETAIN(flt);
+    }
+    return flt;
 }
 
 /*

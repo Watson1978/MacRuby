@@ -635,7 +635,7 @@ w_object(VALUE obj, struct dump_arg *arg, int limit)
 	}
 #endif
     }
-    else if (FIXFLOAT_P(obj)) {
+    else if (FLOAT_P(obj)) {
 	w_byte(TYPE_FLOAT, arg);
 	w_float(RFLOAT_VALUE(obj), arg);
     }

@@ -180,6 +180,7 @@ voodoo_float(float f)
 }
 #define DBL2FIXFLOAT(d) (voodoo_float(d) | FIXFLOAT_FLAG)
 #endif
+#define FLOAT_P(v)  (FIXFLOAT_P(v) || (TYPE(v) == T_FLOAT))
 #define FIXFLOAT_P(v)  (((VALUE)v & IMMEDIATE_MASK) == FIXFLOAT_FLAG)
 #define FIXFLOAT2DBL(v) coerce_ptr_to_double((VALUE)v)
 
@@ -462,8 +463,28 @@ int rb_class_ismeta(VALUE klass);
 #define RCLASS_SET_SUPER(m, s) (rb_class_set_super((VALUE)m, (VALUE)s))
 #define RCLASS_META(m) (rb_class_ismeta((VALUE)m))
 
-#define RFLOAT_VALUE(v) FIXFLOAT2DBL(v)
-#define DOUBLE2NUM(dbl)  rb_float_new(dbl)
+struct RFloat {
+    struct RBasic basic;
+    double float_value;
+};
+
+static inline double
+rb_float_value(VALUE v)
+{
+    if (NIL_P(v)) {
+	return 0.0;
+    }
+
+    if (FIXFLOAT_P(v)) {
+	return FIXFLOAT2DBL(v);
+    }
+    else {
+	return ((struct RFloat*)v)->float_value;
+    }
+}
+
+#define RFLOAT_VALUE(v) rb_float_value(v)
+#define DOUBLE2NUM(dbl) rb_float_new(dbl)
 #define DBL2NUM DOUBLE2NUM
 
 #define ELTS_SHARED FL_USER2
@@ -598,6 +619,7 @@ struct RBignum {
 
 #define R_CAST(st)   (struct st*)
 #define RBASIC(obj)  (R_CAST(RBasic)(obj))
+#define RFLOAT(obj)  (R_CAST(RFloat)(obj))
 #define RARRAY(obj)  (R_CAST(RArray)(obj))
 #define RDATA(obj)   (R_CAST(RData)(obj))
 #define RSTRUCT(obj) (R_CAST(RStruct)(obj))

@@ -5176,6 +5176,11 @@ RoxorAOTCompiler::compile_init_function(void)
 	cast<Function>(module->getOrInsertFunction("rb_bignum_new_retained",
 		    RubyObjTy, PtrTy, NULL));
 
+    Function *newFloatFunc =
+	cast<Function>(module->getOrInsertFunction("rb_float_new_retaind",
+		    RubyObjTy, DoubleTy, NULL));
+
+
     Function *getClassFunc =
 	cast<Function>(module->getOrInsertFunction("objc_getClass",
 		    RubyObjTy, PtrTy, NULL));
@@ -5239,6 +5244,13 @@ RoxorAOTCompiler::compile_init_function(void)
 		    const char *bigstr = RSTRING_PTR(rb_big2str(val, 10));
 		    lit_val = CallInst::Create(newBignumFunc,
 			    compile_const_global_string(bigstr), "", bb);
+		}
+		break;
+
+	    case T_FLOAT:
+		{
+		    lit_val = CallInst::Create(newFloatFunc,
+			    ConstantFP::get(DoubleTy, RFLOAT_VALUE(val)), "", bb);
 		}
 		break;
 

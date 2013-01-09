@@ -8965,7 +8965,7 @@ negate_lit(NODE *node)
       case T_FLOAT:
 	{
 	    double v = -RFLOAT_VALUE(node->nd_lit);
-	    node->nd_lit = DBL2FIXFLOAT(v);
+	    GC_WB(&node->nd_lit, rb_float_new(v));
 	}
 	break;
       default:

@@ -1481,8 +1481,8 @@ sort_2(void *dummy, const void *ap, const void *bp)
 	return 0;
     }
     else if (FIXFLOAT_P(a) && FIXFLOAT_P(b)) {
-	const double fa = FIXFLOAT2DBL(a);
-	const double fb = FIXFLOAT2DBL(b);
+	const double fa = RFLOAT_VALUE(a);
+	const double fb = RFLOAT_VALUE(b);
 	if (fa > fb) {
 	    return 1;
 	}
@@ -2490,8 +2490,8 @@ recursive_equal(VALUE ary1, VALUE ary2, int recur)
 	    VALUE item1 = rary_elt(ary1, i);
 	    VALUE item2 = rary_elt(ary2, i);
 
-	    if ((FIXFLOAT_P(item1) && isnan(FIXFLOAT2DBL(item1)))
-		    || (FIXFLOAT_P(item2) && isnan(FIXFLOAT2DBL(item2)))) {
+	    if ((FIXFLOAT_P(item1) && isnan(RFLOAT_VALUE(item1)))
+		    || (FIXFLOAT_P(item2) && isnan(RFLOAT_VALUE(item2)))) {
 		return Qfalse;
 	    }
 

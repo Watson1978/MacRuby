@@ -84,8 +84,7 @@ rb_eql(VALUE obj1, VALUE obj2)
 {
     VALUE obj1_class = CLASS_OF(obj1);
 
-    if (obj1_class == rb_cFixnum || obj1_class == rb_cFloat
-	    || obj1_class == rb_cSymbol) {
+    if (obj1_class == rb_cFixnum || obj1_class == rb_cSymbol) {
 	return obj1 == obj2;
     }
 

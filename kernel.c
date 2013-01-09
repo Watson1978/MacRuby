@@ -351,7 +351,7 @@ vm_get_block(VALUE obj)
 // Only numeric immediates have their lsb at 1.
 #define NUMERIC_IMM_P(x) ((x & 0x1) == 0x1)
 
-#define IMM2DBL(x) (FIXFLOAT_P(x) ? FIXFLOAT2DBL(x) : FIX2LONG(x))
+#define IMM2DBL(x) (FIXFLOAT_P(x) ? RFLOAT_VALUE(x) : FIX2LONG(x))
 
 PRIMITIVE VALUE
 vm_fast_plus(VALUE left, VALUE right, unsigned char overriden)
@@ -365,7 +365,7 @@ vm_fast_plus(VALUE left, VALUE right, unsigned char overriden)
 	}
 	else {
 	    const double res = IMM2DBL(left) + IMM2DBL(right);
-	    return DBL2FIXFLOAT(res);
+	    return rb_float_new(res);
 	}
     }
     return vm_dispatch(0, left, selPLUS, NULL, 0, 1, &right);
@@ -383,7 +383,7 @@ vm_fast_minus(VALUE left, VALUE right, unsigned char overriden)
 	}
 	else {
 	    const double res = IMM2DBL(left) - IMM2DBL(right);
-	    return DBL2FIXFLOAT(res);
+	    return rb_float_new(res);
 	}
     }
     return vm_dispatch(0, left, selMINUS, NULL, 0, 1, &right);
@@ -409,7 +409,7 @@ vm_fast_mult(VALUE left, VALUE right, unsigned char overriden)
 	}
 	else {
 	    const double res = IMM2DBL(left) * IMM2DBL(right);
-	    return DBL2FIXFLOAT(res);
+	    return rb_float_new(res);
 	}
     }
     return vm_dispatch(0, left, selMULT, NULL, 0, 1, &right);
@@ -435,7 +435,7 @@ vm_fast_div(VALUE left, VALUE right, unsigned char overriden)
 	}
 	else {
 	    const double res = IMM2DBL(left) / IMM2DBL(right);
-	    return DBL2FIXFLOAT(res);
+	    return rb_float_new(res);
 	}
     }
     return vm_dispatch(0, left, selDIV, NULL, 0, 1, &right);
@@ -493,7 +493,7 @@ vm_fast_mod(VALUE left, VALUE right, unsigned char overriden)
 		mod += y;
 		div -= 1.0;
 	    }
-	    return DBL2FIXFLOAT(mod);
+	    return rb_float_new(mod);
 	}
     }
     return vm_dispatch(0, left, selMOD, NULL, 0, 1, &right);

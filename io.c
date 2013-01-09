@@ -4071,7 +4071,7 @@ build_timeval_from_numeric(struct timeval *tv, VALUE num)
 	}
 	tv->tv_sec = FIX2LONG(num);
     }
-    else if (FIXFLOAT_P(num)) {
+    else if (FLOAT_P(num)) {
 	double quantity = RFLOAT_VALUE(num);
 	if (quantity < 0.0) {
 	    rb_raise(rb_eArgError, "select() does not accept negative timeouts.");
