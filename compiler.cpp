@@ -5180,7 +5180,6 @@ RoxorAOTCompiler::compile_init_function(void)
 	cast<Function>(module->getOrInsertFunction("rb_float_new_retaind",
 		    RubyObjTy, DoubleTy, NULL));
 
-
     Function *getClassFunc =
 	cast<Function>(module->getOrInsertFunction("objc_getClass",
 		    RubyObjTy, PtrTy, NULL));

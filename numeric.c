@@ -608,6 +608,13 @@ rb_float_new_retaind(double d)
     return flt;
 }
 
+/* :nodoc: */
+static VALUE
+flo_is_fixfloat_p(VALUE flt, SEL sel)
+{
+    return FIXFLOAT_P(flt) ? Qtrue : Qfalse;
+}
+
 /*
  *  call-seq:
  *     flt.to_s  ->  string
@@ -3701,6 +3708,7 @@ Init_Numeric(void)
     rb_objc_define_method(rb_cFloat, "nan?",      flo_is_nan_p, 0);
     rb_objc_define_method(rb_cFloat, "infinite?", flo_is_infinite_p, 0);
     rb_objc_define_method(rb_cFloat, "finite?",   flo_is_finite_p, 0);
+    rb_objc_define_method(rb_cFloat, "__fixfloat__?", flo_is_fixfloat_p, 0);
 
     class_replaceMethod((Class)rb_cNSNumber, sel_registerName("to_int"),
 	    (IMP)imp_nsnumber_to_int, "@@:");
