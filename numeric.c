@@ -3489,6 +3489,51 @@ imp_nsnumber_to_int(void *rcv, SEL sel)
     return (void *)new_num;
 }
 
+#if WITH_OBJC
+static const char *
+imp_rb_float_objCType(void *rcv, SEL sel)
+{
+    return "d";
+}
+
+static void
+imp_rb_float_getValue(void *rcv, SEL sel, void *buffer)
+{
+    double d = RFLOAT_VALUE((VALUE)rcv);
+    *(double *)buffer = d;
+}
+
+static double
+imp_rb_float_doubleValue(void *rcv, SEL sel)
+{
+    return RFLOAT_VALUE((VALUE)rcv);
+}
+
+static bool
+imp_rb_float_isEqual(void *rcv, SEL sel, void *other)
+{
+    if (other == NULL)
+	return false;
+    if (FLOAT_P((VALUE)other))
+	return false;
+    return flo_eq((VALUE)rcv, 0, (VALUE)other) == Qtrue;
+}
+
+static void
+rb_install_nsnumber_primitives(void)
+{
+    Class klass =  (Class)rb_cFloat;
+    rb_objc_install_method2(klass, "objCType",
+			    (IMP)imp_rb_float_objCType);
+    rb_objc_install_method2(klass, "getValue:",
+			    (IMP)imp_rb_float_getValue);
+    rb_objc_install_method2(klass, "doubleValue",
+			    (IMP)imp_rb_float_doubleValue);
+    rb_objc_install_method2(klass, "isEqual:",
+			    (IMP)imp_rb_float_isEqual);
+}
+#endif
+
 /*
  *  Document-class: ZeroDivisionError
  *
@@ -3712,4 +3757,8 @@ Init_Numeric(void)
 
     class_replaceMethod((Class)rb_cNSNumber, sel_registerName("to_int"),
 	    (IMP)imp_nsnumber_to_int, "@@:");
+
+#if WITH_OBJC
+    rb_install_nsnumber_primitives();
+#endif
 }
