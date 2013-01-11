@@ -1171,7 +1171,7 @@ rb_undef_method(VALUE klass, const char *name)
 VALUE
 rb_singleton_class(VALUE obj)
 {
-    if (FIXNUM_P(obj) || SYMBOL_P(obj) || FLOAT_P(obj)) {
+    if (FIXNUM_P(obj) || SYMBOL_P(obj) || FIXFLOAT_P(obj)) {
 	rb_raise(rb_eTypeError, "can't define singleton");
     }
     if (rb_special_const_p(obj)) {
